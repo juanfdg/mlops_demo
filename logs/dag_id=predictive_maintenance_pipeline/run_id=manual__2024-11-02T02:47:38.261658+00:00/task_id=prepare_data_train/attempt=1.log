@@ -1,0 +1,24 @@
+[2024-11-02T02:47:49.609+0000] {local_task_job_runner.py:123} INFO - ::group::Pre task execution logs
+[2024-11-02T02:47:49.631+0000] {taskinstance.py:2612} INFO - Dependencies all met for dep_context=non-requeueable deps ti=<TaskInstance: predictive_maintenance_pipeline.prepare_data_train manual__2024-11-02T02:47:38.261658+00:00 [queued]>
+[2024-11-02T02:47:49.640+0000] {taskinstance.py:2612} INFO - Dependencies all met for dep_context=requeueable deps ti=<TaskInstance: predictive_maintenance_pipeline.prepare_data_train manual__2024-11-02T02:47:38.261658+00:00 [queued]>
+[2024-11-02T02:47:49.641+0000] {taskinstance.py:2865} INFO - Starting attempt 1 of 1
+[2024-11-02T02:47:49.659+0000] {taskinstance.py:2888} INFO - Executing <Task(PythonOperator): prepare_data_train> on 2024-11-02 02:47:38.261658+00:00
+[2024-11-02T02:47:49.674+0000] {warnings.py:112} WARNING - /home/***/.local/lib/python3.12/site-packages/***/task/task_runner/standard_task_runner.py:70: DeprecationWarning: This process (pid=142) is multi-threaded, use of fork() may lead to deadlocks in the child.
+  pid = os.fork()
+
+[2024-11-02T02:47:49.677+0000] {standard_task_runner.py:72} INFO - Started process 144 to run task
+[2024-11-02T02:47:49.676+0000] {standard_task_runner.py:104} INFO - Running: ['***', 'tasks', 'run', 'predictive_maintenance_pipeline', 'prepare_data_train', 'manual__2024-11-02T02:47:38.261658+00:00', '--job-id', '32', '--raw', '--subdir', 'DAGS_FOLDER/mlops_version_py.py', '--cfg-path', '/tmp/tmp35uioez3']
+[2024-11-02T02:47:49.678+0000] {standard_task_runner.py:105} INFO - Job 32: Subtask prepare_data_train
+[2024-11-02T02:47:49.731+0000] {task_command.py:467} INFO - Running <TaskInstance: predictive_maintenance_pipeline.prepare_data_train manual__2024-11-02T02:47:38.261658+00:00 [running]> on host 1dda86545537
+[2024-11-02T02:47:49.872+0000] {taskinstance.py:3131} INFO - Exporting env vars: AIRFLOW_CTX_DAG_OWNER='***' AIRFLOW_CTX_DAG_ID='predictive_maintenance_pipeline' AIRFLOW_CTX_TASK_ID='prepare_data_train' AIRFLOW_CTX_EXECUTION_DATE='2024-11-02T02:47:38.261658+00:00' AIRFLOW_CTX_TRY_NUMBER='1' AIRFLOW_CTX_DAG_RUN_ID='manual__2024-11-02T02:47:38.261658+00:00'
+[2024-11-02T02:47:49.874+0000] {taskinstance.py:731} INFO - ::endgroup::
+[2024-11-02T02:47:52.323+0000] {logging_mixin.py:190} INFO - /opt/***
+[2024-11-02T02:47:52.345+0000] {logging_mixin.py:190} INFO - Data extracted!
+[2024-11-02T02:47:52.408+0000] {logging_mixin.py:190} INFO - Outliers removed
+[2024-11-02T02:47:52.420+0000] {logging_mixin.py:190} INFO - Dataset padronized
+[2024-11-02T02:47:52.521+0000] {python.py:240} INFO - Done. Returned value was: None
+[2024-11-02T02:47:52.532+0000] {taskinstance.py:340} INFO - ::group::Post task execution logs
+[2024-11-02T02:47:52.532+0000] {taskinstance.py:352} INFO - Marking task as SUCCESS. dag_id=predictive_maintenance_pipeline, task_id=prepare_data_train, run_id=manual__2024-11-02T02:47:38.261658+00:00, execution_date=20241102T024738, start_date=20241102T024749, end_date=20241102T024752
+[2024-11-02T02:47:52.595+0000] {local_task_job_runner.py:266} INFO - Task exited with return code 0
+[2024-11-02T02:47:52.623+0000] {taskinstance.py:3900} INFO - 1 downstream tasks scheduled from follow-on schedule check
+[2024-11-02T02:47:52.627+0000] {local_task_job_runner.py:245} INFO - ::endgroup::
