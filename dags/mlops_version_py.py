@@ -28,7 +28,7 @@ def evaluate_model_with_cv(model, X, y, cv=5):
     return scores.mean(), scores.std()
 
 # Task: Preparação dos dados de treino
-def prepare_data_train():
+def prepare_data_train(**context):
     import pandas as pd
     import numpy as np
     from sklearn.preprocessing import StandardScaler, LabelEncoder
@@ -89,29 +89,29 @@ def prepare_data_train():
 
     print("Dataset padronized")
 
-    df_padronizado.to_csv("df_padronizado.csv", index=False)
+    df_padronizado.to_csv(f"{context['dag_run'].run_id}_df_padronizado.csv", index=False)
 
 # Task: Divisão dos dados para treino e teste
-def train_test_bin_model():
+def train_test_bin_model(**context):
     import numpy as np
     import pandas as pd
     from sklearn.model_selection import train_test_split
 
     print("Spliting train test datasets")
-    df_padronizado = pd.read_csv("df_padronizado.csv")
+    df_padronizado = pd.read_csv(f"{context['dag_run'].run_id}_df_padronizado.csv")
     X = df_padronizado.drop(columns=["Failure Type", "Target"])
     Y = df_padronizado["Target"]
 
     x_train, x_test, y_train, y_test = train_test_split(X, Y, test_size=0.2)
-    np.save("x_train.npy", x_train)
-    np.save("x_test.npy", x_test)
-    np.save("y_train.npy", y_train)
-    np.save("y_test.npy", y_test)
+    np.save(f"{context['dag_run'].run_id}_x_train.npy", x_train)
+    np.save(f"{context['dag_run'].run_id}_x_test.npy", x_test)
+    np.save(f"{context['dag_run'].run_id}_y_train.npy", y_train)
+    np.save(f"{context['dag_run'].run_id}_y_test.npy", y_test)
 
     print("x_train, x_test, y_train, y_test ready")
 
 # Task: Treinamento do melhor modelo binário
-def train_best_model_bin():
+def train_best_model_bin(**context):
     import numpy as np
     import pickle
     from sklearn.linear_model import LogisticRegression
@@ -119,8 +119,8 @@ def train_best_model_bin():
     from sklearn.ensemble import RandomForestClassifier
 
     print("Searching best binary model")
-    x_train = np.load("x_train.npy", allow_pickle=True)
-    y_train = np.load("y_train.npy", allow_pickle=True)
+    x_train = np.load(f"{context['dag_run'].run_id}_x_train.npy", allow_pickle=True)
+    y_train = np.load(f"{context['dag_run'].run_id}_y_train.npy", allow_pickle=True)
 
     models_bin = {
         "Logistic Regression - Pesos automáticos": LogisticRegression(random_state=42, max_iter=4000, class_weight='balanced'),
@@ -141,30 +141,30 @@ def train_best_model_bin():
 
     best_model_01.fit(x_train, y_train)
 
-    with open("model_binary.pkl", "wb") as f:
+    with open(f"{context['dag_run'].run_id}_model_binary.pkl", "wb") as f:
         pickle.dump(best_model_01, f)
 
     print("Model trained and saved")
 
 # Task: Predição nos dados de teste
-def predict_on_test_data():
+def predict_on_test_data(**context):
     import numpy as np
     import pickle
 
-    with open("model_binary.pkl", "rb") as f:
+    with open(f"{context['dag_run'].run_id}_model_binary.pkl", "rb") as f:
         binary_model = pickle.load(f)
-    x_test = np.load("x_test.npy", allow_pickle=True)
+    x_test = np.load(f"{context['dag_run'].run_id}_x_test.npy", allow_pickle=True)
     y_pred = binary_model.predict(x_test)
-    np.save("y_pred.npy", y_pred)
+    np.save(f"{context['dag_run'].run_id}_y_pred.npy", y_pred)
     print("Predicted classes in test dataset")
 
 # Task: Avaliação das métricas
-def get_metrics():
+def get_metrics(**context):
     import numpy as np
     from sklearn.metrics import classification_report
 
-    y_test = np.load("y_test.npy", allow_pickle=True)
-    y_pred = np.load("y_pred.npy", allow_pickle=True)
+    y_test = np.load(f"{context['dag_run'].run_id}_y_test.npy", allow_pickle=True)
+    y_pred = np.load(f"{context['dag_run'].run_id}_y_pred.npy", allow_pickle=True)
     print(classification_report(y_test, y_pred))
 
 # Configuração da DAG
@@ -177,27 +177,32 @@ with DAG(
 
     t1 = PythonOperator(
         task_id="prepare_data_train",
-        python_callable=prepare_data_train
+        python_callable=prepare_data_train,
+        provide_context=True,
     )
 
     t2 = PythonOperator(
         task_id="train_test_bin_model",
-        python_callable=train_test_bin_model
+        python_callable=train_test_bin_model,
+        provide_context=True,
     )
 
     t3 = PythonOperator(
         task_id="train_best_model_bin",
-        python_callable=train_best_model_bin
+        python_callable=train_best_model_bin,
+        provide_context=True,
     )
 
     t4 = PythonOperator(
-        task_id="predict_on_test_data",
-        python_callable=predict_on_test_data
+            task_id="predict_on_test_data",
+        python_callable=predict_on_test_data,
+        provide_context=True,
     )
 
     t5 = PythonOperator(
         task_id="get_metrics",
-        python_callable=get_metrics
+        python_callable=get_metrics,
+        provide_context=True,
     )
 
     # Definindo a sequência de execução
