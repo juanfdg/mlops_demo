@@ -27,13 +27,25 @@ def evaluate_model_with_cv(model, X, y, cv=5):
     scores = cross_val_score(model, X, y, cv=cv, scoring='roc_auc', n_jobs=-1)
     return scores.mean(), scores.std()
 
+# Função para definir a data de filtragem do dataset
+
+def data_filtro(data):
+    import pandas as pd
+    df = pd.read_csv("dags/predictive_maintenance.csv",parse_dates=["date_data"])
+    df["date_data"] = pd.to_datetime(df["date_data"]).dt.normalize()
+    df = df[df["date_data"]<=data].drop(columns="date_data")
+    print (f"Running date = {data}")
+    return df
+
+
 # Task: Preparação dos dados de treino
 def prepare_data_train(**context):
     import pandas as pd
     import numpy as np
     from sklearn.preprocessing import StandardScaler, LabelEncoder
 
-    df = pd.read_csv("dags/predictive_maintenance.csv")
+    data = pd.Timestamp(context["logical_date"]).tz_localize(None).normalize()
+    df = data_filtro(data)
     print("Data extracted!")
 
     df = df.drop(columns=["UDI"])
