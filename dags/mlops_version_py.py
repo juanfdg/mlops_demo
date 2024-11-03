@@ -10,6 +10,10 @@ Original file is located at
 from airflow import DAG
 from airflow.operators.python import PythonOperator
 from datetime import datetime
+import os
+import pickle
+import json
+
 
 # Função para calcular limites de outliers
 def lim_outliers(coluna):
@@ -37,6 +41,23 @@ def data_filtro(data):
     print (f"Running date = {data}")
     return df
 
+
+# Set MLFlow URI
+def mlflow_setup():
+    import mlflow
+
+    mlflow_port = os.getenv("MLFLOW_PORT")
+    mlflow.set_tracking_uri(f"http://mlflow:{mlflow_port}")
+    mlflow.set_experiment("MLOps Demo")
+
+def log_classification_report(cr):
+    import mlflow
+
+    # Logging all metrics in classification_report
+    mlflow.log_metric("accuracy", cr.pop("accuracy"))
+    for class_or_avg, metrics_dict in cr.items():
+        for metric, value in metrics_dict.items():
+            mlflow.log_metric(class_or_avg + '_' + metric,value)
 
 # Task: Preparação dos dados de treino
 def prepare_data_train(**context):
@@ -125,7 +146,6 @@ def train_test_bin_model(**context):
 # Task: Treinamento do melhor modelo binário
 def train_best_model_bin(**context):
     import numpy as np
-    import pickle
     from sklearn.linear_model import LogisticRegression
     from sklearn.neighbors import KNeighborsClassifier
     from sklearn.ensemble import RandomForestClassifier
@@ -134,34 +154,88 @@ def train_best_model_bin(**context):
     x_train = np.load(f"{context['dag_run'].run_id}_x_train.npy", allow_pickle=True)
     y_train = np.load(f"{context['dag_run'].run_id}_y_train.npy", allow_pickle=True)
 
-    models_bin = {
-        "Logistic Regression - Pesos automáticos": LogisticRegression(random_state=42, max_iter=4000, class_weight='balanced'),
-        "Logistic Regression - Pesos manuais": LogisticRegression(class_weight={0:0.507901, 1:2.955361}, max_iter=4000),
-        "KNN": KNeighborsClassifier(n_neighbors=3),
-        "RandomForestClassifier": RandomForestClassifier(class_weight={0:0.697901, 1:11.955361})
+    models_setup = {
+        "Logistic Regression - Pesos automáticos": {
+            "tag": "logistic_regression_auto_weights",
+            "class": LogisticRegression,
+            "params": {
+                "random_state": 42,
+                "max_iter": 4000,
+                "class_weight": "balanced",
+            },
+        },
+        "Logistic Regression - Pesos manuais": {
+            "tag": "logistic_regression_manual_weights",
+            "class": LogisticRegression,
+            "params": {
+                "class_weight": {0: 0.507901, 1: 2.955361},
+                "max_iter": 4000
+            },
+        },
+        "KNN": {
+            "tag": "knn",
+            "class": KNeighborsClassifier,
+            "params": {
+                "n_neighbors": 3
+            },
+        },
+        "RandomForestClassifier": {
+            "tag": "random_forest",
+            "class": RandomForestClassifier,
+            "params": {
+                "class_weight": {0: 0.697901, 1: 11.955361}
+            },
+        },
     }
-
+    models_bin = {
+        model_name: model_setup["class"](**model_setup["params"])
+        for model_name, model_setup in models_setup.items()
+    }
     model_scores = {}
-    for model_name, model in models_bin.items():
+    metrics = {}
+
+    for model_name in models_setup:
+        model = models_bin[model_name]
+        model_tag = models_setup[model_name]["tag"]
+
+        # Evaluate model
         mean_score, std_score = evaluate_model_with_cv(model, x_train, y_train)
         model_scores[model_name] = (mean_score, std_score)
 
+        metrics[f"{model_tag}_cv_mean_accuracy"] = mean_score
+        metrics[f"{model_tag}_cv_std_accuracy"] = std_score
+
+    # Select best model based on cross-validation
     best_model_name = max(model_scores, key=lambda x: model_scores[x][0])
-    best_model_01 = models_bin[best_model_name]
+    best_model = models_bin[best_model_name]
+    print(f"Best model found: {best_model}")
 
-    print(f"Best model found: {best_model_01}")
+    (best_mean_score, best_std_score) = model_scores[best_model_name]
+    metrics["selected_cv_mean_accuracy"] = best_mean_score
+    metrics["selected_cv_std_accuracy"] = best_std_score
 
-    best_model_01.fit(x_train, y_train)
+    # Fit train data
+    best_model.fit(x_train, y_train)
 
     with open(f"{context['dag_run'].run_id}_model_binary.pkl", "wb") as f:
-        pickle.dump(best_model_01, f)
+        pickle.dump(best_model, f)
+
+    with open(f"{context['dag_run'].run_id}_model_params.json", "w") as f:
+        model_params = {
+            "model": best_model_name,
+            "train_date": context["logical_date"].isoformat(),
+            **models_setup[best_model_name]["params"],
+        }
+        json.dump(model_params, f)
+
+    with open(f"{context['dag_run'].run_id}_model_selection_metrics.json", "w") as f:
+        json.dump(metrics, f)
 
     print("Model trained and saved")
 
 # Task: Predição nos dados de teste
 def predict_on_test_data(**context):
     import numpy as np
-    import pickle
 
     with open(f"{context['dag_run'].run_id}_model_binary.pkl", "rb") as f:
         binary_model = pickle.load(f)
@@ -170,14 +244,49 @@ def predict_on_test_data(**context):
     np.save(f"{context['dag_run'].run_id}_y_pred.npy", y_pred)
     print("Predicted classes in test dataset")
 
-# Task: Avaliação das métricas
-def get_metrics(**context):
+# Task: Carregamento das métricas no MLFlow
+def load_metrics(**context):
     import numpy as np
     from sklearn.metrics import classification_report
+    import mlflow
+    from mlflow.models import infer_signature
 
+    with open(f"{context['dag_run'].run_id}_model_binary.pkl", "rb") as f:
+        binary_model = pickle.load(f)
+    x_train = np.load(f"{context['dag_run'].run_id}_x_train.npy", allow_pickle=True)
     y_test = np.load(f"{context['dag_run'].run_id}_y_test.npy", allow_pickle=True)
     y_pred = np.load(f"{context['dag_run'].run_id}_y_pred.npy", allow_pickle=True)
-    print(classification_report(y_test, y_pred))
+    cr = classification_report(y_test, y_pred, output_dict=True)
+    print(cr)
+
+    mlflow_setup()
+    with mlflow.start_run():
+        # Log the hyperparameters
+        with open(f"{context['dag_run'].run_id}_model_params.json", "r") as f:
+            model_params = json.load(f)
+        mlflow.log_params(params=model_params)
+
+        # Log the model selection metrics
+        with open(f"{context['dag_run'].run_id}_model_selection_metrics.json", "r") as f:
+            model_metrics = json.load(f)
+        for name, value in model_metrics.items():
+            mlflow.log_metric(name, value)
+
+        # Log the classification report
+        log_classification_report(cr)
+
+        # Infer the model signature
+        signature = infer_signature(x_train, binary_model.predict(x_train))
+
+        # Log the model
+        mlflow.sklearn.log_model(
+            sk_model=binary_model,
+            artifact_path="mlops_demo",
+            signature=signature,
+            input_example=x_train,
+            registered_model_name="mlops_demo",
+        )
+
 
 # Configuração da DAG
 with DAG(
@@ -206,14 +315,14 @@ with DAG(
     )
 
     t4 = PythonOperator(
-            task_id="predict_on_test_data",
+        task_id="predict_on_test_data",
         python_callable=predict_on_test_data,
         provide_context=True,
     )
 
     t5 = PythonOperator(
         task_id="get_metrics",
-        python_callable=get_metrics,
+        python_callable=load_metrics,
         provide_context=True,
     )
 

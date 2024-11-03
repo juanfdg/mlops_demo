@@ -29,6 +29,8 @@
 #                                Default: 50000
 # AIRFLOW_PROJ_DIR             - Base path to which all the files will be volumed.
 #                                Default: .
+# MLFLOW_PORT                  - Port for MLFlow server
+#                                Default: 8090
 # Those configurations are useful mostly in case of standalone testing/running Airflow in test/try-out mode
 #
 # _AIRFLOW_WWW_USER_USERNAME   - Username for the administrator account (if requested).
@@ -167,6 +169,7 @@ services:
       # Required to handle warm shutdown of the celery workers properly
       # See https://airflow.apache.org/docs/docker-stack/entrypoint.html#signal-propagation
       DUMB_INIT_SETSID: "0"
+      MLFLOW_PORT: ${MLFLOW_PORT:-8090}
     restart: always
     depends_on:
       <<: *airflow-common-depends-on
@@ -286,6 +289,22 @@ services:
       <<: *airflow-common-depends-on
       airflow-init:
         condition: service_completed_successfully
+
+  mlflow:
+    image: ghcr.io/mlflow/mlflow:v2.0.1
+    command: mlflow server --host 0.0.0.0 --port 8090 --backend-store-uri sqlite:///mlflow.db --default-artifact-root ./artifacts
+    ports:
+      - 8090:${MLFLOW_PORT:-8090}
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8090/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    restart: always
+    #network_mode: "host"
+    volumes:
+      - ${AIRFLOW_PROJ_DIR:-.}/mlruns:/opt/mlflow/mlruns
 
 volumes:
   postgres-db-volume:
