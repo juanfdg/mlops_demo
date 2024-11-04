@@ -48,7 +48,7 @@ def mlflow_setup():
 
     mlflow_port = os.getenv("MLFLOW_PORT")
     mlflow.set_tracking_uri(f"http://mlflow:{mlflow_port}")
-    mlflow.set_experiment("MLOps Demo")
+    mlflow.set_experiment("MLOps demo")
 
 def log_classification_report(cr):
     import mlflow
@@ -291,9 +291,10 @@ def load_metrics(**context):
 # Configuração da DAG
 with DAG(
     dag_id="predictive_maintenance_pipeline",
-    start_date=datetime(2023, 1, 1),
+    start_date=datetime(2024, 10, 31),
+    end_date=datetime(2024, 11, 3),
     schedule_interval="@daily",
-    catchup=False
+    catchup=True,
 ) as dag:
 
     t1 = PythonOperator(
